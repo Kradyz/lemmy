@@ -23,10 +23,11 @@ use activitypub_federation::{
 use activitystreams_kinds::public;
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
+use html2md::parse_html;
 use lemmy_api_common::{
   context::LemmyContext,
   request::fetch_site_data,
-  utils::{is_mod_or_admin, local_site_opt_to_slur_regex},
+  utils::local_site_opt_to_slur_regex,
 };
 use lemmy_db_schema::{
   self,
@@ -173,9 +174,6 @@ impl ApubObject for ApubPost {
       .dereference(context, local_instance(context).await, request_counter)
       .await?;
     let community = page.community(context, request_counter).await?;
-    if community.posting_restricted_to_mods {
-      is_mod_or_admin(context.pool(), creator.id, community.id).await?;
-    }
     let mut name = page
       .name
       .clone()
@@ -183,7 +181,8 @@ impl ApubObject for ApubPost {
         page
           .content
           .clone()
-          .and_then(|c| c.lines().next().map(ToString::to_string))
+          .as_ref()
+          .and_then(|c| parse_html(c).lines().next().map(ToString::to_string))
       })
       .ok_or_else(|| anyhow!("Object must have name or content"))?;
     if name.chars().count() > MAX_TITLE_LENGTH {
